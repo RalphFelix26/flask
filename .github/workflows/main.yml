@@ -5,31 +5,78 @@ on:
     branches:
       - main
       - staging
+  pull_request:  # Add pull request triggers for code review
+    branches:
+      - main
+      - staging
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10'] # Test with multiple Python versions
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3  # Use v3 for better performance
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4 # Use v4
         with:
-          python-version: '3.8'
+          python-version: ${{ matrix.python-version }} # Use matrix for Python version
+          cache: 'pip' # Cache dependencies for faster builds
 
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
       - name: Run Tests
-        run: pytest
+        run: pytest --cov=./ --cov-report=./coverage  # Generate coverage reports
+      
+      - name: Upload Coverage Reports
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-flask
+          fail_ci_if_error: true
+          verbose: true
+      
+      - name: Build and Package (Optional but Recommended)
+        if: github.ref == 'refs/heads/main'  # Only for main branch deployments
+        run: |
+          # Example using Docker (more robust for production)
+          docker build -t your-image-name:latest .
+          docker save your-image-name:latest -o flask-app.tar
+
+      - name: Upload Artifact (Optional)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v3
+        with:
+          name: flask-app-package
+          path: flask-app.tar # or your build artifact
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' # Only deploy from main
+    environment: production # Define the environment
     steps:
-      - name: Deploy Application
+      - name: Download Artifact (Optional)
+        uses: actions/download-artifact@v3
+        with:
+          name: flask-app-package
+
+      - name: Deploy to Production
         run: |
           echo "Deploying to Production"
-          # Add deployment steps here
+          # Replace with your actual deployment steps. Examples:
+          # 1. SSH to server and deploy:
+          # ssh your-user@your-server "bash deploy.sh"  # deploy.sh would contain your deployment logic
+          # 2. Deploy to cloud platform (AWS, Google Cloud, Azure, etc.):
+          # Use appropriate actions for your cloud provider.
+          # Example for AWS:
+          # aws ecr get-login-password --region <your-region> | docker login --username AWS --password-stdin <your-account-id>.dkr.ecr.<your-region>.amazonaws.com
+          # docker load -i flask-app.tar
+          # docker tag your-image-name:latest <your-account-id>.dkr.ecr.<your-region>.amazonaws.com/your-repo:latest
+          # docker push <your-account-id>.dkr.ecr.<your-region>.amazonaws.com/your-repo:latest
+          # ... other deployment commands
