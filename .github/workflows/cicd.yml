@@ -1,0 +1,27 @@
+name: CI/CD Pipeline for Flask App
+on:
+  push:
+    branches:
+      - main
+      - staging
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.10'
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+      - name: Run Tests
+        run: pytest
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2
+        run: |
+          ssh -i "${{ secrets.EC2_KEY }}" ubuntu@${{ secrets.EC2_IP }} "cd flask-app && git pull && python app.py &"
